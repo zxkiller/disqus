@@ -61,7 +61,7 @@ while ($post_id < $max_post_id) {
     print_line('  Exporting comments for post id %d', $post_id);
 
     $response = null;
-    $query = $wpdb->get_results( $wpdb->prepare("SELECT TOP " . EXPORT_CHUNK_SIZE . " COUNT(*) as total FROM $wpdb->comments WHERE comment_post_ID = %d AND comment_agent NOT LIKE 'Disqus/%%'", $post_id) );
+    $query = $wpdb->get_results( $wpdb->prepare("SELECT COUNT(*) as total FROM $wpdb->comments WHERE comment_post_ID = %d AND comment_agent NOT LIKE 'Disqus/%%'", $post_id) );
     $total_comments = $query[0]->total;
 
     $comments = $wpdb->get_results( $wpdb->prepare("SELECT TOP " . EXPORT_CHUNK_SIZE . " * FROM $wpdb->comments WHERE comment_post_ID = %d AND comment_agent NOT LIKE 'Disqus/%%'", $post_id) );
