@@ -207,7 +207,7 @@ function dsq_sync_comments($comments) {
     }
     $thread_ids = "'" . implode("', '", array_keys($thread_map)) . "'";
 
-    $results = $wpdb->get_results( "SELECT post_id, meta_value FROM $wpdb->postmeta WHERE meta_key = 'dsq_thread_id' AND meta_value IN ({$thread_ids}) LIMIT 1");
+    $results = $wpdb->get_results( "SELECT TOP 1 post_id, meta_value FROM $wpdb->postmeta WHERE meta_key = 'dsq_thread_id' AND meta_value IN ({$thread_ids})");
     foreach ( $results as $result ) {
         $thread_map[$result->meta_value] = $result->post_id;
     }
@@ -241,7 +241,7 @@ function dsq_sync_comments($comments) {
             }
             continue;
         }
-        $results = $wpdb->get_results($wpdb->prepare("SELECT comment_id FROM $wpdb->commentmeta WHERE meta_key = 'dsq_post_id' AND meta_value = %s LIMIT 1", $comment->id));
+        $results = $wpdb->get_results($wpdb->prepare("SELECT TOP 1 comment_id FROM $wpdb->commentmeta WHERE meta_key = 'dsq_post_id' AND meta_value = %s", $comment->id));
         if (count($results)) {
             // already exists
             if (DISQUS_DEBUG) {
@@ -251,7 +251,7 @@ function dsq_sync_comments($comments) {
                 // clean up duplicates -- fixes an issue where a race condition allowed comments to be synced multiple times
                 $results = array_slice($results, 1);
                 foreach ($results as $result) {
-                    $wpdb->prepare("DELETE FROM $wpdb->commentmeta WHERE comment_id = %s LIMIT 1", $result);
+                    $wpdb->prepare("DELETE FROM $wpdb->commentmeta WHERE comment_id = %s", $result);
                 }
             }
             continue;
@@ -268,7 +268,7 @@ function dsq_sync_comments($comments) {
             }
             unset($value);
             if ($meta['wp_id']) {
-                $commentdata = $wpdb->get_row($wpdb->prepare( "SELECT comment_ID, comment_parent FROM $wpdb->comments WHERE comment_ID = %s LIMIT 1", $meta['wp_id']), ARRAY_A);
+                $commentdata = $wpdb->get_row($wpdb->prepare( "SELECT comment_ID, comment_parent FROM $wpdb->comments WHERE comment_ID = %s", $meta['wp_id']), ARRAY_A);
             }
         }
 
@@ -282,7 +282,7 @@ function dsq_sync_comments($comments) {
 
         // and follow up using legacy Disqus agent
         if (!$commentdata) {
-            $commentdata = $wpdb->get_row($wpdb->prepare( "SELECT comment_ID, comment_parent FROM $wpdb->comments WHERE comment_agent = 'Disqus/1.0:{$comment->id}' LIMIT 1"), ARRAY_A);
+            $commentdata = $wpdb->get_row($wpdb->prepare( "SELECT TOP 1 comment_ID, comment_parent FROM $wpdb->comments WHERE comment_agent = 'Disqus/1.0:{$comment->id}'"), ARRAY_A);
         }
         if (!$commentdata) {
             // Comment doesnt exist yet, lets insert it
@@ -319,14 +319,14 @@ function dsq_sync_comments($comments) {
             }
             $commentdata = wp_filter_comment($commentdata);
             if ($comment->parent_post) {
-                $parent_id = $wpdb->get_var($wpdb->prepare( "SELECT comment_id FROM $wpdb->commentmeta WHERE meta_key = 'dsq_post_id' AND meta_value = %s LIMIT 1", $comment->parent_post));
+                $parent_id = $wpdb->get_var($wpdb->prepare( "SELECT TOP 1 comment_id FROM $wpdb->commentmeta WHERE meta_key = 'dsq_post_id' AND meta_value = %s", $comment->parent_post));
                 if ($parent_id) {
                     $commentdata['comment_parent'] = $parent_id;
                 }
             }
 
             // due to a race condition we need to test again for coment existance
-            if ($wpdb->get_row($wpdb->prepare( "SELECT comment_id FROM $wpdb->commentmeta WHERE meta_key = 'dsq_post_id' AND meta_value = %s LIMIT 1", $comment->id))) {
+            if ($wpdb->get_row($wpdb->prepare( "SELECT TOP 1 comment_id FROM $wpdb->commentmeta WHERE meta_key = 'dsq_post_id' AND meta_value = %s", $comment->id))) {
                 // already exists
                 if (DISQUS_DEBUG) {
                     echo "skipped {$comment->id}: comment already exists (second check)\n";
@@ -340,7 +340,7 @@ function dsq_sync_comments($comments) {
             }
         }
         if (!$commentdata['comment_parent'] && $comment->parent_post) {
-            $parent_id = $wpdb->get_var($wpdb->prepare( "SELECT comment_id FROM $wpdb->commentmeta WHERE meta_key = 'dsq_post_id' AND meta_value = %s LIMIT 1", $comment->parent_post));
+            $parent_id = $wpdb->get_var($wpdb->prepare( "SELECT TOP 1 comment_id FROM $wpdb->commentmeta WHERE meta_key = 'dsq_post_id' AND meta_value = %s", $comment->parent_post));
             if ($parent_id) {
                 $wpdb->query($wpdb->prepare( "UPDATE $wpdb->comments SET comment_parent = %s WHERE comment_id = %s", $parent_id, $commentdata['comment_ID']));
                 if (DISQUS_DEBUG) {
@@ -422,14 +422,13 @@ function dsq_request_handler() {
                     $post_id = intval($_GET['post_id']);
                     global $wpdb, $dsq_api;
                     $post = $wpdb->get_results($wpdb->prepare("
-                        SELECT *
+                        SELECT TOP 1 *
                         FROM $wpdb->posts
                         WHERE post_type != 'revision'
                         AND post_status = 'publish'
                         AND comment_count > 0
                         AND ID > %d
                         ORDER BY ID ASC
-                        LIMIT 1
                     ", $post_id));
                     $post = $post[0];
                     $post_id = $post->ID;
@@ -1558,7 +1557,7 @@ function dsq_install_database($version=0) {
     global $wpdb;
 
     if (version_compare($version, '2.49', '<')) {
-        $wpdb->query("CREATE INDEX disqus_dupecheck ON `".$wpdb->prefix."commentmeta` (meta_key, meta_value(11));");
+        $wpdb->query("CREATE INDEX disqus_dupecheck ON `".$wpdb->prefix."commentmeta` (meta_key, meta_value);");
     }
 }
 function dsq_reset_database($version=0) {

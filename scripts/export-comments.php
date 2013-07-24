@@ -47,14 +47,13 @@ while ($post_id < $max_post_id) {
     $start = microtime();
 
     $post = $wpdb->get_results($wpdb->prepare("
-        SELECT *
+        SELECT TOP 1 *
         FROM $wpdb->posts
         WHERE post_type != 'revision'
         AND post_status = 'publish'
         AND comment_count > 0
         AND ID > %d
         ORDER BY ID ASC
-        LIMIT 1
     ", $post_id));
     $post = $post[0];
     $post_id = $post->ID;
@@ -62,10 +61,10 @@ while ($post_id < $max_post_id) {
     print_line('  Exporting comments for post id %d', $post_id);
 
     $response = null;
-    $query = $wpdb->get_results( $wpdb->prepare("SELECT COUNT(*) as total FROM $wpdb->comments WHERE comment_post_ID = %d AND comment_agent NOT LIKE 'Disqus/%%' LIMIT ".EXPORT_CHUNK_SIZE, $post_id) );
+    $query = $wpdb->get_results( $wpdb->prepare("SELECT TOP " . EXPORT_CHUNK_SIZE . " COUNT(*) as total FROM $wpdb->comments WHERE comment_post_ID = %d AND comment_agent NOT LIKE 'Disqus/%%'", $post_id) );
     $total_comments = $query[0]->total;
 
-    $comments = $wpdb->get_results( $wpdb->prepare("SELECT * FROM $wpdb->comments WHERE comment_post_ID = %d AND comment_agent NOT LIKE 'Disqus/%%' LIMIT ".EXPORT_CHUNK_SIZE, $post_id) );
+    $comments = $wpdb->get_results( $wpdb->prepare("SELECT TOP " . EXPORT_CHUNK_SIZE . " * FROM $wpdb->comments WHERE comment_post_ID = %d AND comment_agent NOT LIKE 'Disqus/%%'", $post_id) );
     $group_id = null;
     $at = 0;
 
@@ -86,7 +85,7 @@ while ($post_id < $max_post_id) {
         print_line('    %d comments exported', count($comments), $time);
         $total_exported += count($comments);
         $at += EXPORT_CHUNK_SIZE;
-        $comments = $wpdb->get_results( $wpdb->prepare("SELECT * FROM $wpdb->comments WHERE comment_post_ID = %d AND comment_agent NOT LIKE 'Disqus/%%' LIMIT ".EXPORT_CHUNK_SIZE." OFFSET {$at}", $post->ID) );
+        $comments = $wpdb->get_results( $wpdb->prepare("SELECT * FROM $wpdb->comments WHERE comment_post_ID = %d AND comment_agent NOT LIKE 'Disqus/%%' ORDER BY ID OFFSET " . EXPORT_CHUNK_SIZE . " ROWS FETCH NEXT {$at} ROWS ONLY", $post->ID) );
         // assuming the cache is the internal, reset it's value to empty to avoid
         // large memory consumption
         $wp_object_cache->cache = array();
